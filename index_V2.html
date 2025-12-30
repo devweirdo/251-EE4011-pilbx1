@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pill Box Manager</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+    <style>
+        :root { --primary: #007bff; --bg: #f4f6f9; --card: #ffffff; --danger: #ff4757; }
+        
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+            text-align: center; padding: 20px; background: var(--bg); color: #333; margin: 0;
+            -webkit-font-smoothing: antialiased; 
+        }
+        
+        .container { max-width: 420px; margin: auto; padding-bottom: 60px; }
+        
+        /* FADING & LOCKING */
+        .disabled-card { opacity: 0.5; pointer-events: none; filter: grayscale(100%); transition: 0.3s; }
+        .card { background: var(--card); padding: 20px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); margin-bottom: 20px; text-align: left; transition: opacity 0.3s ease; }
+        .card h4 { margin-top: 0; color: #444; border-bottom: 1px solid #eee; padding-bottom: 12px; font-size: 18px; margin-bottom: 15px;}
+        
+        /* BUTTONS */
+        button { padding: 14px; cursor: pointer; background: var(--primary); color: white; border: none; border-radius: 10px; font-weight: 600; width: 100%; font-size: 16px; margin-top: 5px; touch-action: manipulation; }
+        button:active { opacity: 0.8; transform: scale(0.98); }
+        button.danger { background: var(--danger); width: auto; padding: 6px 14px; font-size: 14px; margin: 0; border-radius: 6px; }
+        
+        /* INPUTS */
+        label { display: block; margin-top: 15px; font-size: 14px; color: #666; font-weight: 500; }
+        input[type="text"], input[type="password"] { width: 100%; padding: 12px; margin: 5px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; background: #fafafa; }
+        
+        /* TIME INPUT STYLES */
+        .time-box-container { display: flex; align-items: center; justify-content: space-between; gap: 5px; margin-top: 10px; }
+        .time-input-wrapper { display: flex; align-items: center; gap: 5px; background: #fafafa; border: 1px solid #ddd; border-radius: 8px; padding: 5px; flex-grow: 1;}
+        .time-box { width: 40px; border: none; background: transparent; text-align: center; font-size: 20px; font-weight: bold; padding: 5px; outline: none; }
+        .colon { font-size: 20px; font-weight: bold; color: #666; }
+        
+        /* AM/PM SELECTOR (Hidden by default) */
+        .ampm-select { display: none; background: #eee; border: none; font-size: 16px; font-weight: bold; padding: 5px; border-radius: 6px; color: #333; }
+        
+        /* VOLUME CONTROLS */
+        .vol-group { display: flex; align-items: center; gap: 10px; margin: 15px 0; }
+        input[type="range"] { flex-grow: 1; height: 30px; }
+        input[type="number"] { width: 60px; padding: 8px; border: 1px solid #ddd; border-radius: 8px; text-align: center; font-size: 16px; }
+
+        /* TOGGLE SWITCH ALIGNMENT FIX */
+        .toggle-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .toggle-row h4 { border: none; margin: 0; padding: 0; } /* Remove border from H4 since row has it */
+        
+        .format-selector { 
+            display: flex; 
+            align-items: center; /* Vertical Center */
+            gap: 10px; 
+            font-size: 13px; 
+            color: #666;
+            font-weight: 600;
+        }
+
+        /* The Switch Itself */
+        .switch { position: relative; display: inline-block; width: 46px; height: 24px; margin: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #e0e0e0; transition: .3s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(22px); }
+
+        /* LIST */
+        .sched-list { list-style: none; padding: 0; margin-top: 20px; }
+        .sched-item { background: #f8f9fa; border: 1px solid #eef0f2; padding: 12px 15px; margin-bottom: 8px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: 600; color: #2d3436; }
+        
+        .status { text-align: center; font-size: 14px; color: #888; margin-bottom: 20px; font-weight: 500; }
+        pre { background: #2d3436; color: #dfe6e9; padding: 15px; border-radius: 8px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; font-family: monospace; line-height: 1.4; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="color: #333;">💊 Pill Reminder</h2>
+    <div id="status" class="status">Status: Disconnected</div>
+    <button id="connectBtn" onclick="connect()">Pair Device</button>
+    <br><br>
+
+    <div id="controlsArea" class="disabled-card">
+        
+        <div class="card">
+            <h4>📶 Wi-Fi Settings</h4>
+            <label>Network Name (SSID)</label>
+            <input type="text" id="wifiSSID" placeholder="SSID">
+            <label>Password</label>
+            <input type="password" id="wifiPass" placeholder="Password">
+            <button onclick="saveWiFi()" style="margin-top: 15px;">Connect to WiFi</button>
+        </div>
+
+        <div class="card">
+            <div class="toggle-row">
+                <h4>📅 Alarm Schedule</h4>
+                
+                <div class="format-selector">
+                    <span>24H</span>
+                    <label class="switch">
+                        <input type="checkbox" id="formatToggle" onchange="toggleFormat()">
+                        <span class="slider"></span>
+                    </label>
+                    <span>12H</span>
+                </div>
+            </div>
+            
+            <div class="time-box-container">
+                <div class="time-input-wrapper">
+                    <input type="tel" id="hh" class="time-box" placeholder="--" maxlength="2" oninput="handleHourInput(this)">
+                    <span class="colon">:</span>
+                    <input type="tel" id="mm" class="time-box" placeholder="--" maxlength="2" onkeydown="handleBackspace(event)">
+                    
+                    <select id="ampm" class="ampm-select">
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                    </select>
+                </div>
+                <button onclick="addSchedule()" style="width: auto; padding: 10px 20px; margin:0;">+</button>
+            </div>
+
+            <ul id="scheduleList" class="sched-list">
+                <li class="sched-item" style="color:#999; justify-content:center; font-weight: normal;">(Loading...)</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h4>🔊 Settings & Logs</h4>
+            <label>Buzzer Volume (%)</label>
+            <div class="vol-group">
+                <input type="range" id="volSlider" min="0" max="100" value="50" oninput="syncVolBox(this.value)" onchange="setVolume(this.value)">
+                <input type="number" id="volBox" min="0" max="100" value="50" onchange="setVolume(this.value)">
+            </div>
+            
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 25px 0;">
+            <label>Compliance History:</label>
+            <pre id="logArea">Log data will appear here...</pre>
+            <button onclick="readLog()" style="background: #636e72;">Refresh Log</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+    const WIFI_UUID    = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+    const SCHED_UUID   = "8899aabb-ccdd-eeff-0011-223344556677";
+    const VOL_UUID     = "12345678-1234-1234-1234-1234567890ab";
+    const HIST_UUID    = "99999999-9999-9999-9999-999999999999";
+    const CONF_UUID    = "55555555-5555-5555-5555-555555555555";
+
+    let device, server, service;
+    let currentSchedule = []; 
+    let is12HourMode = false;
+
+    // --- CONNECTION ---
+    async function connect() {
+        try {
+            device = await navigator.bluetooth.requestDevice({
+                filters: [{ name: "pilbx_v2" }],
+                optionalServices: [SERVICE_UUID]
+            });
+            document.getElementById('status').textContent = "Connecting...";
+            server = await device.gatt.connect();
+            service = await server.getPrimaryService(SERVICE_UUID);
+
+            document.getElementById('status').textContent = "Connected to: " + device.name;
+            document.getElementById('connectBtn').textContent = "Paired ✓";
+            document.getElementById('connectBtn').style.background = "#2ed573";
+            document.getElementById('connectBtn').disabled = true;
+            document.getElementById('controlsArea').classList.remove('disabled-card');
+
+            await loadVolume();
+            await loadConfig(); 
+            setTimeout(loadSchedule, 300);
+
+        } catch (err) {
+            console.error(err);
+            alert("Connection Failed: " + err);
+            document.getElementById('status').textContent = "Status: Disconnected";
+        }
+    }
+
+    // --- 12H/24H TOGGLE LOGIC ---
+    async function loadConfig() {
+        try {
+            const char = await service.getCharacteristic(CONF_UUID);
+            const val = await char.readValue();
+            const str = new TextDecoder().decode(val);
+            
+            if (str === "12H") {
+                document.getElementById('formatToggle').checked = true;
+                is12HourMode = true;
+            } else {
+                document.getElementById('formatToggle').checked = false;
+                is12HourMode = false;
+            }
+            updateUIFormat();
+        } catch(e) { console.log("Config char not found", e); }
+    }
+
+    async function toggleFormat() {
+        if (!service) return;
+        is12HourMode = document.getElementById('formatToggle').checked;
+        
+        updateUIFormat();
+        renderScheduleList();
+        
+        const char = await service.getCharacteristic(CONF_UUID);
+        const data = is12HourMode ? "12H" : "24H";
+        await char.writeValue(new TextEncoder().encode(data));
+    }
+
+    function updateUIFormat() {
+        const ampmSelect = document.getElementById('ampm');
+        if (is12HourMode) {
+            ampmSelect.style.display = "block";
+            document.getElementById('hh').placeholder = "--";
+        } else {
+            ampmSelect.style.display = "none";
+            document.getElementById('hh').placeholder = "--";
+        }
+    }
+
+    // --- SCHEDULE LOGIC ---
+    async function loadSchedule() {
+        try {
+            const char = await service.getCharacteristic(SCHED_UUID);
+            const val = await char.readValue();
+            const str = new TextDecoder().decode(val);
+            if (str && str.length > 0 && str !== "CLEAR") {
+                currentSchedule = str.split(',').filter(t => t.includes(':') && t.length === 5);
+            } else {
+                currentSchedule = [];
+            }
+            renderScheduleList();
+        } catch (e) { console.log("Error loading schedule", e); }
+    }
+
+    // Helper: 24h String -> 12h String
+    function to12h(timeStr) {
+        let [h, m] = timeStr.split(':');
+        h = parseInt(h);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        if (h === 0) h = 12;
+        return `${h}:${m} ${ampm}`;
+    }
+
+    function renderScheduleList() {
+        const list = document.getElementById('scheduleList');
+        list.innerHTML = ""; 
+        if (currentSchedule.length === 0) {
+            list.innerHTML = "<li class='sched-item' style='color:#999; justify-content:center; font-weight: normal;'>Empty Schedule</li>";
+            return;
+        }
+        currentSchedule.sort();
+        currentSchedule.forEach((time, index) => {
+            const li = document.createElement("li");
+            li.className = "sched-item";
+            
+            const displayTime = is12HourMode ? to12h(time) : time;
+            
+            li.innerHTML = `<span>⏰ ${displayTime}</span> <button class="danger" onclick="removeSchedule(${index})">✕</button>`;
+            list.appendChild(li);
+        });
+    }
+
+    // --- ADD SCHEDULE ---
+    async function addSchedule() {
+        let h = document.getElementById('hh').value;
+        const m = document.getElementById('mm').value.padStart(2, '0');
+        
+        if (is12HourMode) {
+            const ampm = document.getElementById('ampm').value;
+            h = parseInt(h);
+            if (ampm === "PM" && h < 12) h += 12;
+            if (ampm === "AM" && h === 12) h = 0;
+            h = h.toString().padStart(2, '0');
+        } else {
+             h = h.padStart(2, '0');
+        }
+
+        const time = h + ":" + m;
+
+        if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time)) return alert("Invalid time.");
+
+        if (!currentSchedule.includes(time)) {
+            currentSchedule.push(time);
+            await syncScheduleToDevice();
+            document.getElementById('hh').value = "";
+            document.getElementById('mm').value = "";
+            document.getElementById('hh').focus();
+        } else {
+            alert("Alarm already exists!");
+        }
+    }
+
+    async function saveWiFi() {
+        const ssid = document.getElementById('wifiSSID').value;
+        const pass = document.getElementById('wifiPass').value;
+        if (!ssid) return alert("SSID cannot be empty");
+        await service.getCharacteristic(WIFI_UUID).then(c => c.writeValue(new TextEncoder().encode(ssid + "," + pass)));
+        alert("WiFi Credentials Sent!");
+    }
+
+    function handleHourInput(el) { if (el.value.length >= 2) document.getElementById('mm').focus(); }
+    function handleBackspace(e) { if (e.key === "Backspace" && e.target.value.length === 0) document.getElementById('hh').focus(); }
+
+    async function removeSchedule(index) {
+        if (!confirm("Delete alarm?")) return;
+        currentSchedule.splice(index, 1);
+        await syncScheduleToDevice();
+    }
+
+    async function syncScheduleToDevice() {
+        let dataStr = currentSchedule.join(",");
+        if (currentSchedule.length === 0) dataStr = "CLEAR";
+        const char = await service.getCharacteristic(SCHED_UUID);
+        await char.writeValue(new TextEncoder().encode(dataStr));
+        renderScheduleList(); 
+    }
+
+    async function loadVolume() {
+        const char = await service.getCharacteristic(VOL_UUID);
+        const val = await char.readValue();
+        const raw = parseInt(new TextDecoder().decode(val));
+        const pct = Math.round((raw / 255) * 100);
+        document.getElementById('volSlider').value = pct;
+        document.getElementById('volBox').value = pct;
+    }
+
+    function syncVolBox(val) { document.getElementById('volBox').value = val; }
+
+    async function setVolume(pct) {
+        if(pct > 100) pct = 100; if(pct < 0) pct = 0;
+        document.getElementById('volSlider').value = pct;
+        document.getElementById('volBox').value = pct;
+        const raw = Math.round((pct / 100) * 255);
+        const char = await service.getCharacteristic(VOL_UUID);
+        await char.writeValue(new TextEncoder().encode(raw.toString()));
+    }
+
+    async function readLog() {
+        const char = await service.getCharacteristic(HIST_UUID);
+        const val = await char.readValue();
+        document.getElementById('logArea').textContent = new TextDecoder().decode(val);
+    }
+</script>
+
+</body>
+</html>
