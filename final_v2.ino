@@ -170,10 +170,51 @@ void scheduleNextAlarm() {
   nextAlarmDisplay = String(b);
 }
 
+// --- HISTORY PERSISTENCE HELPER FUNCTIONS ---
+
+void saveHistory() {
+  String allLogs = "";
+  // Combine all vector entries into one long string with newlines
+  for (const String &s : historyEntries) {
+    allLogs += s + "\n";
+  }
+  // Save to NVS memory
+  preferences.putString("history", allLogs);
+}
+
+void loadHistory() {
+  // Retrieve the single string blob
+  String savedLogs = preferences.getString("history", "");
+
+  if (savedLogs.length() == 0) return;  // Nothing to load
+
+  historyEntries.clear();
+  int start = 0;
+  int end = savedLogs.indexOf('\n');
+
+  // Split string back into vector entries
+  while (end != -1) {
+    String entry = savedLogs.substring(start, end);
+    if (entry.length() > 0) {
+      historyEntries.push_back(entry);
+    }
+    start = end + 1;
+    end = savedLogs.indexOf('\n', start);
+  }
+
+  // Safety check: ensure we don't exceed 20 if the save file was weird
+  while (historyEntries.size() > 20) {
+    historyEntries.erase(historyEntries.begin());
+  }
+}
+
 void updateHistoryLog(String timeStr, String result) {
   String entry = timeStr + " " + result;
   historyEntries.push_back(entry);
   if (historyEntries.size() > 20) historyEntries.erase(historyEntries.begin());
+
+  saveHistory();
+
   String fullLog = "Log History:\n";
   for (const String &s : historyEntries) fullLog += s + "\n";
   pHistChar->setValue(fullLog.c_str());
@@ -387,6 +428,7 @@ void setup() {
   String savedSched = preferences.getString("sched", "08:00,12:00,18:00");
   parseSchedule(savedSched);
   scheduleNextAlarm();
+  loadHistory();
 
   attachInterrupt(digitalPinToInterrupt(SQW_PIN), onAlarmISR, FALLING);
 
@@ -407,7 +449,13 @@ void setup() {
   pVolChar->setValue(String(currentVolume).c_str());
 
   pHistChar = pSvc->createCharacteristic(CHAR_HIST_UUID, BLECharacteristic::PROPERTY_READ);
-  pHistChar->setValue("No logs yet.");
+  if (historyEntries.empty()) {
+    pHistChar->setValue("No logs yet.");
+  } else {
+    String fullLog = "Log History:\n";
+    for (const String &s : historyEntries) fullLog += s + "\n";
+    pHistChar->setValue(fullLog.c_str());
+  }
 
   // --- NEW: CONFIG CHARACTERISTIC ---
   pConfChar = pSvc->createCharacteristic(CHAR_CONF_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
